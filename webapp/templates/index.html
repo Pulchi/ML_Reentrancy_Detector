@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reentrancy Detection - Smart Contract Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh; color: #e0e0e0;
+        }
+        .container { max-width: 960px; margin: 0 auto; padding: 30px 20px; }
+        h1 {
+            text-align: center; font-size: 2em; margin-bottom: 8px;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { text-align: center; color: #888; margin-bottom: 30px; font-size: 0.95em; }
+
+        .card {
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; padding: 24px; margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 { font-size: 1.15em; margin-bottom: 16px; color: #3a7bd5; }
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed rgba(58,123,213,0.4); border-radius: 10px;
+            padding: 30px; text-align: center; cursor: pointer;
+            transition: all 0.3s; margin-bottom: 16px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #3a7bd5; background: rgba(58,123,213,0.08);
+        }
+        .upload-area .icon { font-size: 2.5em; margin-bottom: 10px; }
+        .upload-area p { color: #aaa; }
+        .upload-area .filename { color: #00d2ff; font-weight: 600; margin-top: 8px; }
+        input[type="file"] { display: none; }
+
+        /* Code textarea */
+        .or-divider { text-align: center; color: #666; margin: 12px 0; font-size: 0.85em; }
+        textarea {
+            width: 100%; min-height: 180px; background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;
+            color: #e0e0e0; padding: 14px; font-family: 'Consolas', monospace;
+            font-size: 0.85em; resize: vertical;
+        }
+        textarea:focus { outline: none; border-color: #3a7bd5; }
+
+        /* Button */
+        .btn {
+            display: block; width: 100%; padding: 14px;
+            background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+            border: none; border-radius: 8px; color: #fff; font-size: 1.1em;
+            font-weight: 600; cursor: pointer; transition: all 0.3s;
+            margin-top: 16px;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(58,123,213,0.4); }
+        .btn:disabled { opacity: 0.5; cursor: wait; transform: none; }
+
+        /* Results */
+        #results { display: none; }
+        .result-header {
+            display: flex; align-items: center; gap: 16px;
+            padding: 20px; border-radius: 10px; margin-bottom: 16px;
+        }
+        .result-safe { background: rgba(76,175,80,0.15); border: 1px solid rgba(76,175,80,0.3); }
+        .result-vuln { background: rgba(244,67,54,0.15); border: 1px solid rgba(244,67,54,0.3); }
+        .result-icon { font-size: 2.5em; }
+        .result-label { font-size: 1.4em; font-weight: 700; }
+        .result-safe .result-label { color: #4CAF50; }
+        .result-vuln .result-label { color: #f44336; }
+        .confidence { font-size: 0.95em; color: #aaa; }
+
+        /* Explanation */
+        .explanation {
+            background: rgba(0,0,0,0.2); border-radius: 8px;
+            padding: 20px; line-height: 1.7; white-space: pre-wrap;
+        }
+        .explanation strong { color: #3a7bd5; }
+
+        /* Features table */
+        .feat-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px; margin-top: 12px;
+        }
+        .feat-item {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 6px;
+            font-size: 0.82em;
+        }
+        .feat-name { color: #aaa; }
+        .feat-val { font-weight: 600; color: #00d2ff; }
+        .feat-val.on { color: #4CAF50; }
+        .feat-val.off { color: #666; }
+
+        /* Comparison table */
+        .compare-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+        }
+        .compare-box {
+            padding: 18px; border-radius: 10px; position: relative;
+        }
+        .compare-slither {
+            background: rgba(255,152,0,0.08); border: 1px solid rgba(255,152,0,0.25);
+        }
+        .compare-hybrid {
+            background: rgba(0,210,255,0.08); border: 1px solid rgba(0,210,255,0.25);
+        }
+        .compare-box h3 { font-size: 1em; margin-bottom: 10px; }
+        .compare-slither h3 { color: #ffa726; }
+        .compare-hybrid h3 { color: #00d2ff; }
+        .compare-badge {
+            display: inline-block; padding: 3px 10px; border-radius: 20px;
+            font-size: 0.8em; font-weight: 700; margin-bottom: 8px;
+        }
+        .badge-vuln { background: rgba(244,67,54,0.2); color: #f44336; }
+        .badge-safe { background: rgba(76,175,80,0.2); color: #4CAF50; }
+        .badge-na { background: rgba(255,255,255,0.08); color: #888; }
+        .compare-detail { font-size: 0.82em; color: #aaa; line-height: 1.6; }
+        .compare-detail li { margin-bottom: 4px; }
+        .highlight-label {
+            position: absolute; top: -10px; right: 12px;
+            background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+            color: #fff; font-size: 0.7em; font-weight: 700;
+            padding: 2px 10px; border-radius: 10px;
+        }
+        .slither-finding {
+            background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 6px;
+            margin-top: 8px; font-size: 0.82em; line-height: 1.5;
+            border-left: 3px solid;
+        }
+        .finding-high { border-left-color: #f44336; }
+        .finding-medium { border-left-color: #ffa726; }
+        .finding-low { border-left-color: #66bb6a; }
+        .finding-info { border-left-color: #42a5f5; }
+        .finding-tag {
+            display: inline-block; padding: 1px 7px; border-radius: 3px;
+            font-size: 0.75em; font-weight: 600; margin-right: 6px;
+        }
+        .tag-high { background: rgba(244,67,54,0.2); color: #f44336; }
+        .tag-medium { background: rgba(255,167,38,0.2); color: #ffa726; }
+        .tag-low { background: rgba(102,187,106,0.2); color: #66bb6a; }
+        .tag-info { background: rgba(66,165,245,0.2); color: #42a5f5; }
+        .weakness-note {
+            margin-top: 12px; padding: 10px 14px; border-radius: 6px;
+            background: rgba(255,152,0,0.06); border: 1px dashed rgba(255,152,0,0.2);
+            font-size: 0.8em; color: #bbb; line-height: 1.5;
+        }
+        @media (max-width: 700px) { .compare-grid { grid-template-columns: 1fr; } }
+        .spinner { display: inline-block; width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+            border-radius: 50%; animation: spin 0.6s linear infinite;
+            vertical-align: middle; margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            h1 { font-size: 1.5em; }
+            .feat-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>&#128737; Reentrancy Detection</h1>
+        <p class="subtitle">ML-powered Smart Contract Vulnerability Analyzer &mdash; 17 features, 86.3% accuracy</p>
+
+        <div class="card">
+            <h2>Upload Contract</h2>
+            <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <div class="icon">&#128196;</div>
+                <p>Drop a <strong>.sol</strong> file here or click to browse</p>
+                <div class="filename" id="fileLabel"></div>
+            </div>
+            <input type="file" id="fileInput" accept=".sol">
+
+            <div class="or-divider">&mdash; OR paste code below &mdash;</div>
+
+            <textarea id="codeInput" placeholder="// Paste your Solidity code here...
+pragma solidity ^0.8.0;
+
+contract MyContract {
+    ...
+}"></textarea>
+
+            <button class="btn" id="analyzeBtn" onclick="analyze()">
+                Analyze Contract
+            </button>
+        </div>
+
+        <div id="results">
+            <div class="card">
+                <div id="resultHeader" class="result-header">
+                    <div class="result-icon" id="resultIcon"></div>
+                    <div>
+                        <div class="result-label" id="resultLabel"></div>
+                        <div class="confidence" id="resultConf"></div>
+                    </div>
+                </div>
+                <div id="mlResult" style="margin-top: 12px; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.04); display: none;">
+                    <span style="color: #aaa;">&#129302; <strong>ML Model Prediction:</strong> </span>
+                    <span id="mlLabel"></span>
+                    <span id="mlConf" style="color: #888;"></span>
+                    <span id="overrideNote" style="color: #ffa726; display: none;"> &#8594; Overridden by Slither reentrancy-eth detection</span>
+                </div>
+            </div>
+
+            <div class="card" id="compareCard" style="display:none;">
+                <h2>&#9878; Slither vs Hybrid ML Model</h2>
+                <div class="compare-grid">
+                    <div class="compare-box compare-slither">
+                        <h3>&#128270; Slither (Static Analysis Only)</h3>
+                        <div id="slitherVerdict"></div>
+                        <div id="slitherFindings" class="compare-detail"></div>
+                        <div class="weakness-note" id="slitherWeakness"></div>
+                    </div>
+                    <div class="compare-box compare-hybrid">
+                        <span class="highlight-label">OUR MODEL</span>
+                        <h3>&#129302; Hybrid ML Model (22 Features)</h3>
+                        <div id="hybridVerdict"></div>
+                        <div id="hybridDetail" class="compare-detail"></div>
+                    </div>
+                </div>
+                <div id="slitherAllFindings" style="margin-top:16px;"></div>
+            </div>
+
+            <div class="card">
+                <h2>&#128269; Rule-Based Analysis</h2>
+                <div class="explanation" id="explanation"></div>
+            </div>
+
+            <div class="card" id="llmCard">
+                <h2>&#129302; LLM Analysis (Groq / LLaMA 3.3 70B)</h2>
+                <div class="explanation" id="llmExplanation"></div>
+            </div>
+
+            <div class="card">
+                <h2>&#128202; Extracted Features (17)</h2>
+                <div class="feat-grid" id="featGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+
+        // Drag & drop
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault(); dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                fileLabel.textContent = e.dataTransfer.files[0].name;
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) fileLabel.textContent = fileInput.files[0].name;
+        });
+
+        async function analyze() {
+            const btn = document.getElementById('analyzeBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+
+            const formData = new FormData();
+            if (fileInput.files.length) {
+                formData.append('file', fileInput.files[0]);
+            }
+            formData.append('code', document.getElementById('codeInput').value);
+
+            try {
+                const resp = await fetch('/analyze', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    btn.disabled = false;
+                    btn.textContent = 'Analyze Contract';
+                    return;
+                }
+
+                // Show results
+                document.getElementById('results').style.display = 'block';
+
+                const header = document.getElementById('resultHeader');
+                const icon = document.getElementById('resultIcon');
+                const label = document.getElementById('resultLabel');
+                const conf = document.getElementById('resultConf');
+
+                header.className = 'result-header ' + (data.prediction_code === 1 ? 'result-vuln' : 'result-safe');
+                icon.textContent = data.prediction_code === 1 ? '\u26A0\uFE0F' : '\u2705';
+                label.textContent = data.prediction;
+                conf.textContent = `Confidence: ${data.confidence}% \u2014 File: ${data.filename} \u2014 Mode: ${data.analysis_mode || 'Source Analysis + ML'}`;
+
+                // Show Slither status
+                if (!data.slither_used) {
+                    const slitherNote = document.createElement('div');
+                    slitherNote.style.cssText = 'color:#ffa726; font-size:0.85em; margin-top:8px;';
+                    slitherNote.textContent = data.slither_available
+                        ? '\u26A0 Slither was found but failed to analyze this contract (possible solc version issue). Using regex fallback.'
+                        : '\u26A0 Slither not installed. Install it (pip install slither-analyzer) for more accurate analysis.';
+                    header.appendChild(slitherNote);
+                }
+
+                // Show ML model result
+                const mlResult = document.getElementById('mlResult');
+                const mlLabel = document.getElementById('mlLabel');
+                const mlConf = document.getElementById('mlConf');
+                const overrideNote = document.getElementById('overrideNote');
+                mlResult.style.display = 'block';
+                const mlIsVuln = data.ml_prediction === 'Reentrant (Vulnerable)';
+                mlLabel.textContent = data.ml_prediction;
+                mlLabel.style.color = mlIsVuln ? '#f44336' : '#4CAF50';
+                mlConf.textContent = ` (${data.ml_confidence}%)`;
+                overrideNote.style.display = data.slither_override ? 'inline' : 'none';
+
+                // Explanation (render markdown-like bold)
+                const expEl = document.getElementById('explanation');
+                expEl.innerHTML = data.explanation
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n/g, '<br>');
+
+                // LLM explanation
+                const llmCard = document.getElementById('llmCard');
+                const llmEl = document.getElementById('llmExplanation');
+                if (data.llm_explanation) {
+                    llmCard.style.display = 'block';
+                    llmEl.innerHTML = data.llm_explanation
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br>');
+                } else {
+                    llmCard.style.display = 'block';
+                    llmEl.innerHTML = '<span style="color:#ffa726;">LLM analysis not available. Set GROQ_API_KEY environment variable to enable.</span>';
+                }
+
+                // Features grid
+                const grid = document.getElementById('featGrid');
+                grid.innerHTML = '';
+                for (const [key, val] of Object.entries(data.features)) {
+                    const item = document.createElement('div');
+                    item.className = 'feat-item';
+                    const isBool = (val === 0 || val === 1) && !key.startsWith('num_') && !key.startsWith('lines_');
+                    const valClass = isBool ? (val ? 'on' : 'off') : '';
+                    const display = isBool ? (val ? 'Yes' : 'No') : val;
+                    item.innerHTML = `<span class="feat-name">${key}</span><span class="feat-val ${valClass}">${display}</span>`;
+                    grid.appendChild(item);
+                }
+
+                // Scroll to results
+                document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+
+                // ── Slither vs Hybrid comparison card ──
+                const compareCard = document.getElementById('compareCard');
+                if (data.slither_used) {
+                    compareCard.style.display = 'block';
+
+                    // Slither side
+                    const sv = document.getElementById('slitherVerdict');
+                    const sf = document.getElementById('slitherFindings');
+                    const sw = document.getElementById('slitherWeakness');
+
+                    const slitherIsVuln = data.slither_verdict === 'Vulnerable';
+                    const badgeClass = slitherIsVuln ? 'badge-vuln' : (data.slither_verdict === 'No Finding' ? 'badge-safe' : 'badge-na');
+                    sv.innerHTML = `<span class="compare-badge ${badgeClass}">${data.slither_verdict}</span>`;
+
+                    if (data.slither_reentrancy_findings && data.slither_reentrancy_findings.length > 0) {
+                        let html = '<ul style="padding-left:16px; margin:8px 0;">';
+                        data.slither_reentrancy_findings.forEach(f => {
+                            const impact = (f.impact || 'info').toLowerCase();
+                            html += `<li><span class="finding-tag tag-${impact}">${f.impact}</span><strong>${f.check}</strong></li>`;
+                        });
+                        html += '</ul>';
+                        sf.innerHTML = html;
+                    } else {
+                        sf.innerHTML = '<p style="color:#888;">No reentrancy detectors triggered.</p>';
+                    }
+
+                    // Slither weaknesses
+                    sw.innerHTML = '<strong style="color:#ffa726;">&#9888; Slither Limitations:</strong><br>' +
+                        '&bull; Binary output only (vulnerable / not) &mdash; no confidence score<br>' +
+                        '&bull; High false-positive rate on complex contracts<br>' +
+                        '&bull; Cannot detect cross-function or cross-contract reentrancy well<br>' +
+                        '&bull; Misses patterns like interface casting, hidden internal calls';
+
+                    // Hybrid side
+                    const hv = document.getElementById('hybridVerdict');
+                    const hd = document.getElementById('hybridDetail');
+
+                    const hybridBadge = data.prediction_code === 1 ? 'badge-vuln' : 'badge-safe';
+                    const hybridLabel = data.prediction_code === 1 ? 'Vulnerable' : 'Safe';
+                    hv.innerHTML = `<span class="compare-badge ${hybridBadge}">${hybridLabel}</span> ` +
+                        `<span style="color:#aaa; font-size:0.85em;">${data.confidence}% confidence</span>`;
+
+                    const advantages = [
+                        'Uses <strong>17 features</strong>: source patterns + Slither detectors + CFG analysis',
+                        `CEI violation from CFG: <strong>${data.features.cei_violation ? 'Detected' : 'Not found'}</strong>`,
+                        `External calls in CFG: <strong>${data.features.num_external_calls}</strong>`,
+                        'Provides <strong>confidence score</strong> (not just binary yes/no)',
+                        'Trained on <strong>manually-verified dataset</strong> with cross-validation',
+                        'Combines Slither signals with 18 source-code features for fewer false positives',
+                    ];
+                    hd.innerHTML = '<ul style="padding-left:16px; margin:8px 0;">' +
+                        advantages.map(a => `<li>${a}</li>`).join('') + '</ul>';
+
+                    // All Slither findings (expandable)
+                    const allDiv = document.getElementById('slitherAllFindings');
+                    if (data.slither_all_findings && data.slither_all_findings.length > 0) {
+                        let html = '<details><summary style="cursor:pointer; color:#3a7bd5; font-size:0.9em; font-weight:600;">&#128196; View all Slither findings (' + data.slither_all_findings.length + ')</summary>';
+                        data.slither_all_findings.forEach(f => {
+                            const impact = (f.impact || 'Informational').toLowerCase();
+                            const impactClass = impact === 'high' ? 'finding-high' : impact === 'medium' ? 'finding-medium' : impact === 'low' ? 'finding-low' : 'finding-info';
+                            const tagClass = impact === 'high' ? 'tag-high' : impact === 'medium' ? 'tag-medium' : impact === 'low' ? 'tag-low' : 'tag-info';
+                            const desc = (f.description || '').replace(/\n/g, '<br>');
+                            html += `<div class="slither-finding ${impactClass}">` +
+                                `<span class="finding-tag ${tagClass}">${f.impact}</span>` +
+                                `<strong>${f.check}</strong> (${f.confidence} confidence)<br>` +
+                                `<span style="color:#ccc;">${desc}</span></div>`;
+                        });
+                        html += '</details>';
+                        allDiv.innerHTML = html;
+                    } else {
+                        allDiv.innerHTML = '';
+                    }
+                } else {
+                    compareCard.style.display = 'none';
+                }
+
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+            btn.disabled = false;
+            btn.textContent = 'Analyze Contract';
+        }
+    </script>
+</body>
+</html>

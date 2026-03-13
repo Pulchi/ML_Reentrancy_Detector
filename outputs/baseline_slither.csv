@@ -1,0 +1,6 @@
+file,version,true_label,slither_pred
+CallCons_safe1.sol,0_4,0,0
+CastCons_safe1.sol,0_4,0,0
+CastCons_safe2.sol,0_4,0,0
+CallEmit_safe1.sol,0_4,0,1
+CastEmit_safe1.sol,0_4,0,1
