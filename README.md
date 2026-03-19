@@ -89,7 +89,10 @@ reentrancy_ml_project/
 - **365 manually verified Solidity contracts** (167 reentrant, 198 safe)
 - Covers Solidity versions **0.4.x, 0.5.x, and 0.8.x**
 - Each contract is labeled by human experts as reentrant or safe
-- Dataset source: [manually-verified-reentrancy-dataset](../manually-verified-reentrancy-dataset/)
+
+The training dataset is sourced from [matteo-rizzo/manually-verified-reentrancy-dataset](https://github.com/matteo-rizzo/manually-verified-reentrancy-dataset). We gratefully acknowledge the authors for creating and publicly sharing this high-quality, manually verified benchmark for reentrancy vulnerability detection.
+
+> M. Rizzo et al., "manually-verified-reentrancy-dataset" — A curated dataset of Solidity smart contracts with expert-labeled reentrancy annotations.
 
 ## Setup
 
@@ -103,8 +106,8 @@ reentrancy_ml_project/
 
 ```bash
 # Clone the repo
-git clone https://github.com/vrajang/reentrancy_ml_project.git
-cd reentrancy_ml_project
+git clone https://github.com/Pulchi/ML_Reentrancy_Detector.git
+cd ML_Reentrancy_Detector
 
 # Create virtual environment
 python -m venv .venv
